@@ -1,41 +1,55 @@
 package com.taesiri.nativeview;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
 import android.R;
+import android.R.string;
 import android.app.Activity;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
+import android.graphics.Bitmap.CompressFormat;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.PointF;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
+import android.hardware.Camera.PictureCallback;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.view.Display;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import android.view.View.OnClickListener;
 import android.view.View.OnTouchListener;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.Toast;
 
 import com.almeros.android.multitouch.gesturedetectors.MoveGestureDetector;
 import com.almeros.android.multitouch.gesturedetectors.RotateGestureDetector;
-import com.almeros.android.multitouch.gesturedetectors.ShoveGestureDetector;
 
 public class LiveCameraModeActivity extends Activity implements OnTouchListener {
 
-
+    public static Bitmap camPhoto;
+    
 	private Camera mCamera;
     private CameraPreview mPreview;
     private MediaRecorder mMediaRecorder;
@@ -55,13 +69,17 @@ public class LiveCameraModeActivity extends Activity implements OnTouchListener 
     private ScaleGestureDetector mScaleDetector;
     private RotateGestureDetector mRotateDetector;
     private MoveGestureDetector mMoveDetector;
-    private ShoveGestureDetector mShoveDetector; 
+    
+    
+
+    public static LiveCameraModeActivity instance;
     
     public static String handle_imageUrl = "default";
     
     @SuppressWarnings("deprecation")
     @Override
     public void onCreate(Bundle savedInstanceState) {
+    	
         super.onCreate(savedInstanceState);
         setContentView(com.taesiri.coc.R.layout.livecamerafeed_layout);
 
@@ -116,25 +134,64 @@ public class LiveCameraModeActivity extends Activity implements OnTouchListener 
  		mScaleDetector 	= new ScaleGestureDetector(getApplicationContext(), new ScaleListener());
  		mRotateDetector = new RotateGestureDetector(getApplicationContext(), new RotateListener());
  		mMoveDetector 	= new MoveGestureDetector(getApplicationContext(), new MoveListener());
- 		mShoveDetector 	= new ShoveGestureDetector(getApplicationContext(), new ShoveListener());
- 		
- 		
  		
  		
  		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
  		
  		
- 		
+ 		Button captureBtn = (Button) findViewById(com.taesiri.coc.R.id.captureBtn);
+ 		captureBtn.setOnClickListener(new OnClickListener() {
+			
+			@Override
+			public void onClick(View arg0) {
+				// TODO Auto-generated method stub
+				
+                Bitmap screen = takeScreenshot();
+				LiveCameraModeActivity.saveBitmap(screen, "ghost");  
+				mCamera.takePicture(null, null, mPicture);
+			}
+		});
  		
  		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ 		
+ 		
+ 		instance = this;
     }
+    
+    public Bitmap takeScreenshot() {
+ 	   View rootView = findViewById(com.taesiri.coc.R.id.imageView);
+ 	   rootView.setDrawingCacheEnabled(true);
+ 	   return rootView.getDrawingCache();
+ 	}
+    
+    public static Bitmap RotateBitmap(Bitmap source, float angle)
+    {
+          Matrix matrix = new Matrix();
+          matrix.postRotate(angle);
+          return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
+    }
+    
+	 public static void saveBitmap(Bitmap bitmap,String name) {
+	    File imagePath = new File(Environment.getExternalStorageDirectory() + "/" + name + ".png");
+	    FileOutputStream fos;
+	    try {
+	        fos = new FileOutputStream(imagePath);
+	        bitmap.compress(CompressFormat.PNG, 100, fos);
+	        fos.flush();
+	        fos.close();
+	    } catch (FileNotFoundException e) {
+	        Log.e("TAESIRI", e.getMessage(), e);
+	    } catch (IOException e) {
+	        Log.e("TAESIRI", e.getMessage(), e);
+	    }
+	}
+
     
     @SuppressWarnings("deprecation")
 	public boolean onTouch(View v, MotionEvent event) {
         mScaleDetector.onTouchEvent(event);
         mRotateDetector.onTouchEvent(event);
         mMoveDetector.onTouchEvent(event);
-        mShoveDetector.onTouchEvent(event);
 
         float scaledImageCenterX = (mImageWidth*mScaleFactor)/2;
         float scaledImageCenterY = (mImageHeight*mScaleFactor)/2;
@@ -184,19 +241,6 @@ public class LiveCameraModeActivity extends Activity implements OnTouchListener 
 		}
 	}		
 	
-	private class ShoveListener extends ShoveGestureDetector.SimpleOnShoveGestureListener {
-		@Override
-		public boolean onShove(ShoveGestureDetector detector) {
-			mAlpha += detector.getShovePixelsDelta();
-			if (mAlpha > 255)
-				mAlpha = 255;
-			else if (mAlpha < 0)
-				mAlpha = 0;
-			
-			return true;
-		}
-	}	
-	
 
     /** A safe way to get an instance of the Camera object. */
     public static Camera getCameraInstance(){
@@ -215,46 +259,6 @@ public class LiveCameraModeActivity extends Activity implements OnTouchListener 
         return c; // returns null if camera is unavailable
     }
 
-    private boolean prepareVideoRecorder(){
-
-
-        mMediaRecorder = new MediaRecorder();
-
-        // Step 1: Unlock and set camera to MediaRecorder
-        mCamera.stopPreview();
-        mCamera.unlock();
-        mMediaRecorder.setCamera(mCamera);
-
-        // Step 2: Set sources
-        mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
-        mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-
-
-
-        // Step 3: Set a CamcorderProfile (requires API Level 8 or higher)
-        mMediaRecorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_HIGH));
-
-
-        // Step 4: Set output file
-        mMediaRecorder.setOutputFile(getOutputMediaFile(MEDIA_TYPE_VIDEO).toString());
-
-        // Step 5: Set the preview output
-        mMediaRecorder.setPreviewDisplay(mPreview.getHolder().getSurface());
-
-        // Step 6: Prepare configured MediaRecorder
-        try {
-            mMediaRecorder.prepare();
-        } catch (IllegalStateException e) {
-            Log.d("DEBUG", "IllegalStateException preparing MediaRecorder: " + e.getMessage());
-            releaseMediaRecorder();
-            return false;
-        } catch (IOException e) {
-            Log.d("DEBUG", "IOException preparing MediaRecorder: " + e.getMessage());
-            releaseMediaRecorder();
-            return false;
-        }
-        return true;
-    }
 
     /** Create a file Uri for saving an image or video */
     private static Uri getOutputMediaFileUri(int type){
@@ -299,6 +303,7 @@ public class LiveCameraModeActivity extends Activity implements OnTouchListener 
         super.onPause();
         releaseMediaRecorder();       // if you are using MediaRecorder, release it first
         releaseCamera();              // release the camera immediately on pause event
+        finish();
     }
 
     private void releaseMediaRecorder(){
@@ -316,8 +321,53 @@ public class LiveCameraModeActivity extends Activity implements OnTouchListener 
             isRecording = false;
             mCamera.stopPreview();
         mCamera.setPreviewCallback(null);
-            mCamera.release();        // release the camera for other applications
+            mCamera.release();      
             mCamera = null;
         }
     }
+    
+    private PictureCallback mPicture = new PictureCallback() {
+
+        @Override
+        public void onPictureTaken(byte[] data, Camera camera) {
+
+            File pictureFile = getOutputMediaFile(MEDIA_TYPE_IMAGE);
+            if (pictureFile == null){
+                return;
+            }
+              
+            Bitmap cameraPhoto = BitmapFactory.decodeByteArray(data, 0, data.length);
+            cameraPhoto = LiveCameraModeActivity.RotateBitmap(cameraPhoto.copy(cameraPhoto.getConfig(), true),90);
+            
+            
+            Bitmap ghost = BitmapFactory.decodeFile(Environment.getExternalStorageDirectory() + "/ghost.png");
+            Bitmap finalImage = ghost.copy(ghost.getConfig(), true);
+            
+            Rect dstRect = new Rect();
+            
+            Canvas canvas = new Canvas(finalImage);
+            canvas.getClipBounds(dstRect);
+            canvas.drawBitmap(cameraPhoto, null, dstRect, null);
+            canvas.drawBitmap(ghost, new Matrix(), null);
+            
+            
+ 		
+          	File imagePath = new File(Environment.getExternalStorageDirectory() + "/result.png");
+	  	    FileOutputStream foss;
+	  	    try {
+		  	    	foss = new FileOutputStream(imagePath);
+		  	    	finalImage.compress(CompressFormat.JPEG, 100, foss);
+		  	        foss.flush();
+		  	        foss.close();
+		  	    }
+	  	    catch (FileNotFoundException e) {
+		  	        Log.e("TAESIRI", e.getMessage(), e);    
+	  	    }
+	  	    catch (IOException e) {
+		  	        Log.e("TAESIRI", e.getMessage(), e);    
+	  	    }
+               
+        }
+    };
+    
 }

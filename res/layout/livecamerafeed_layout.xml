@@ -21,12 +21,12 @@
         android:src="@drawable/brongold" />
 
 <Button
-    android:id="@+id/button1"
+    android:id="@+id/captureBtn"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:layout_alignParentBottom="true"
     android:layout_alignParentLeft="true"
     android:layout_alignParentRight="true"
-    android:text="Button" />
+    android:text="Capture" />
 
 </RelativeLayout>
